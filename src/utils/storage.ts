@@ -768,28 +768,7 @@ export function addAssignmentHistoryRecord(record: BatchAssignmentHistory) {
 
 // 3. BATCH APIs
 export function getBatches(): Batch[] {
-  const batches = getStoredData<Batch>(KEYS.BATCHES);
-  let updated = false;
-  const users = getStoredData<User>(KEYS.USERS);
-  batches.forEach(b => {
-    if (!b.assignedSIId && b.createdBy) {
-      b.assignedSIId = b.createdBy;
-      const supervisor = users.find(u => u.id === b.createdBy);
-      b.assignedSIName = supervisor ? supervisor.name : b.createdByName;
-      updated = true;
-    }
-  });
-  if (updated) {
-    setStoredData(KEYS.BATCHES, batches);
-    safeSupabaseOp("Sync Batches", () => {
-      const payloadList = camelToSnake(batches).map((bPayload: any) => {
-        delete bPayload.capacity;
-        return bPayload;
-      });
-      return supabase.from("batches").upsert(payloadList, { onConflict: "id" });
-    });
-  }
-  return batches;
+  return getStoredData<Batch>(KEYS.BATCHES);
 }
 
 export async function reloadBatchesFromSupabase(): Promise<Batch[]> {
@@ -1512,7 +1491,7 @@ export async function syncFromSupabase() {
       return;
     }
 
-    MEMORY_DB[KEYS.USERS] = dbUsers ? snakeToCamel(dbUsers) : [];
+    setStoredData(KEYS.USERS, dbUsers ? snakeToCamel(dbUsers) : []);
     // Auto-seed trades if table in Supabase is empty
     if (!dbTrades || dbTrades.length === 0) {
       console.log("Trades table in Supabase is empty. Seeding default trades...");
@@ -1522,9 +1501,9 @@ export async function syncFromSupabase() {
       });
       await supabase.from("trades").upsert(sanitizedDefaultTrades, { onConflict: "id" });
       const { data: reFetchedTrades } = await supabase.from("trades").select("*");
-      MEMORY_DB[KEYS.TRADES] = reFetchedTrades ? snakeToCamel(reFetchedTrades) : DEFAULT_TRADES;
+      setStoredData(KEYS.TRADES, reFetchedTrades ? snakeToCamel(reFetchedTrades) : DEFAULT_TRADES);
     } else {
-      MEMORY_DB[KEYS.TRADES] = snakeToCamel(dbTrades);
+      setStoredData(KEYS.TRADES, snakeToCamel(dbTrades));
     }
 
     // Auto-seed batches if table in Supabase is empty
@@ -1536,23 +1515,23 @@ export async function syncFromSupabase() {
       });
       await supabase.from("batches").upsert(sanitizedDefaultBatches, { onConflict: "id" });
       const { data: reFetchedBatches } = await supabase.from("batches").select("*");
-      MEMORY_DB[KEYS.BATCHES] = reFetchedBatches ? snakeToCamel(reFetchedBatches) : DEFAULT_BATCHES;
+      setStoredData(KEYS.BATCHES, reFetchedBatches ? snakeToCamel(reFetchedBatches) : DEFAULT_BATCHES);
     } else {
-      MEMORY_DB[KEYS.BATCHES] = snakeToCamel(dbBatches);
+      setStoredData(KEYS.BATCHES, snakeToCamel(dbBatches));
     }
-    MEMORY_DB[KEYS.STUDENTS] = dbStudents ? snakeToCamel(dbStudents) : [];
-    MEMORY_DB[KEYS.HISTORY] = dbHistory ? snakeToCamel(dbHistory) : [];
-    MEMORY_DB[KEYS.LOGS] = dbLogs ? dbLogs.map((l: any) => ({
+    setStoredData(KEYS.STUDENTS, dbStudents ? snakeToCamel(dbStudents) : []);
+    setStoredData(KEYS.HISTORY, dbHistory ? snakeToCamel(dbHistory) : []);
+    setStoredData(KEYS.LOGS, dbLogs ? dbLogs.map((l: any) => ({
       id: l.id,
       user: l.user_name || l.userName || l.user || "System",
       action: l.action || "",
       date: l.date || "",
       time: l.time || ""
-    })) : [];
-    MEMORY_DB[KEYS.WORKING_DAYS] = dbWorkingDays ? snakeToCamel(dbWorkingDays) : [];
-    MEMORY_DB[KEYS.ATTENDANCE] = dbAttendance ? snakeToCamel(dbAttendance) : [];
-    MEMORY_DB[KEYS.PROMOTIONS] = dbPromotions ? snakeToCamel(dbPromotions) : [];
-    MEMORY_DB[KEYS.ASSIGNMENT_HISTORY] = dbAssignmentHistory ? snakeToCamel(dbAssignmentHistory) : [];
+    })) : []) ;
+    setStoredData(KEYS.WORKING_DAYS, dbWorkingDays ? snakeToCamel(dbWorkingDays) : []);
+    setStoredData(KEYS.ATTENDANCE, dbAttendance ? snakeToCamel(dbAttendance) : []);
+    setStoredData(KEYS.PROMOTIONS, dbPromotions ? snakeToCamel(dbPromotions) : []);
+    setStoredData(KEYS.ASSIGNMENT_HISTORY, dbAssignmentHistory ? snakeToCamel(dbAssignmentHistory) : []);
 
     if (dbLetters) {
       dbLetters.forEach(l => {
