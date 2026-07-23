@@ -29,7 +29,11 @@ export function camelToSnake(obj: any): any {
   if (Array.isArray(obj)) return obj.map(camelToSnake);
   const n: any = {};
   Object.keys(obj).forEach(k => {
-    const newKey = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    let newKey = k.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    newKey = newKey
+      .replace(/_s_i_id$/g, "_si_id")
+      .replace(/_s_i_name$/g, "_si_name")
+      .replace(/_s_i_/g, "_si_");
     n[newKey] = typeof obj[k] === 'object' && k !== 'documents' ? camelToSnake(obj[k]) : obj[k];
   });
   return n;
@@ -41,7 +45,10 @@ export function snakeToCamel(obj: any): any {
   if (Array.isArray(obj)) return obj.map(snakeToCamel);
   const n: any = {};
   Object.keys(obj).forEach(k => {
-    const newKey = k.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    let newKey = k.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    newKey = newKey
+      .replace(/SiId$/g, "SIId")
+      .replace(/SiName$/g, "SIName");
     n[newKey] = typeof obj[k] === 'object' && k !== 'documents' ? snakeToCamel(obj[k]) : obj[k];
   });
   return n;
@@ -713,34 +720,37 @@ export function saveTrade(trade: Trade) {
   }
   setStoredData(KEYS.TRADES, trades);
 
-  if (isUpdate) {
-    safeSupabaseOp("Update Trade", async () => {
-      const payload = camelToSnake(trade);
-      delete payload.seat_capacity;
+  safeSupabaseOp("Save Trade", async () => {
+    const payload = camelToSnake(trade);
+    delete payload.seat_capacity;
 
-      const { data, error } = await supabase
+    console.log(`[Supabase Trade Sync] Upserting on table 'trades', Record ID: '${trade.id}', Payload:`, payload);
+
+    const { data, error } = await supabase
+      .from("trades")
+      .upsert(payload, { onConflict: "id" })
+      .select();
+
+    if (error) {
+      console.error("[Supabase Trade Sync Error] Error updating/saving trade in Supabase:", error);
+    } else {
+      console.log(`[Supabase Trade Sync Success] Upserted trade '${trade.id}'. Affected rows count: ${data ? data.length : 0}`, data);
+      
+      const { data: verified, error: verifyErr } = await supabase
         .from("trades")
-        .update(payload)
-        .eq("id", trade.id)
-        .select();
+        .select("*")
+        .eq("id", trade.id);
 
-      if (error) {
-        console.error("Error updating trade in Supabase:", error);
+      if (verifyErr) {
+        console.error("[Supabase Trade Verification Error]", verifyErr);
       } else {
-        if (data && data.length === 0) {
-          console.warn(`Trade UPDATE affected 0 rows for primary key id: '${trade.id}'. Check if record exists in Supabase DB.`);
-        }
-        await reloadTradesFromSupabase();
+        console.log(`[Supabase Trade Verified] Read back record for '${trade.id}':`, verified);
       }
-      return { data, error };
-    });
-  } else {
-    safeSupabaseOp("Save Trade", () => {
-      const payload = camelToSnake(trade);
-      delete payload.seat_capacity;
-      return supabase.from("trades").upsert(payload);
-    });
-  }
+
+      await reloadTradesFromSupabase();
+    }
+    return { data, error };
+  });
 }
 
 // 2b. BATCH ASSIGNMENT HISTORY APIs
@@ -771,7 +781,13 @@ export function getBatches(): Batch[] {
   });
   if (updated) {
     setStoredData(KEYS.BATCHES, batches);
-    safeSupabaseOp("Sync Batches", () => supabase.from("batches").upsert(camelToSnake(batches)));
+    safeSupabaseOp("Sync Batches", () => {
+      const payloadList = camelToSnake(batches).map((bPayload: any) => {
+        delete bPayload.capacity;
+        return bPayload;
+      });
+      return supabase.from("batches").upsert(payloadList, { onConflict: "id" });
+    });
   }
   return batches;
 }
@@ -807,34 +823,37 @@ export function saveBatch(batch: Batch) {
   }
   setStoredData(KEYS.BATCHES, batches);
 
-  if (isUpdate) {
-    safeSupabaseOp("Update Batch", async () => {
-      const payload = camelToSnake(batch);
-      delete payload.capacity;
+  safeSupabaseOp("Save Batch", async () => {
+    const payload = camelToSnake(batch);
+    delete payload.capacity;
 
-      const { data, error } = await supabase
+    console.log(`[Supabase Batch Sync] Upserting on table 'batches', Record ID: '${batch.id}', Payload:`, payload);
+
+    const { data, error } = await supabase
+      .from("batches")
+      .upsert(payload, { onConflict: "id" })
+      .select();
+
+    if (error) {
+      console.error("[Supabase Batch Sync Error] Error updating/saving batch in Supabase:", error);
+    } else {
+      console.log(`[Supabase Batch Sync Success] Upserted batch '${batch.id}'. Affected rows count: ${data ? data.length : 0}`, data);
+
+      const { data: verified, error: verifyErr } = await supabase
         .from("batches")
-        .update(payload)
-        .eq("id", batch.id)
-        .select();
+        .select("*")
+        .eq("id", batch.id);
 
-      if (error) {
-        console.error("Error updating batch in Supabase:", error);
+      if (verifyErr) {
+        console.error("[Supabase Batch Verification Error]", verifyErr);
       } else {
-        if (data && data.length === 0) {
-          console.warn(`Batch UPDATE affected 0 rows for primary key id: '${batch.id}'. Check if record exists in Supabase DB.`);
-        }
-        await reloadBatchesFromSupabase();
+        console.log(`[Supabase Batch Verified] Read back record for '${batch.id}':`, verified);
       }
-      return { data, error };
-    });
-  } else {
-    safeSupabaseOp("Save Batch", () => {
-      const payload = camelToSnake(batch);
-      delete payload.capacity;
-      return supabase.from("batches").upsert(payload);
-    });
-  }
+
+      await reloadBatchesFromSupabase();
+    }
+    return { data, error };
+  });
 }
 
 // 4. STUDENT APIs
@@ -1494,8 +1513,33 @@ export async function syncFromSupabase() {
     }
 
     MEMORY_DB[KEYS.USERS] = dbUsers ? snakeToCamel(dbUsers) : [];
-    MEMORY_DB[KEYS.TRADES] = dbTrades ? snakeToCamel(dbTrades) : [];
-    MEMORY_DB[KEYS.BATCHES] = dbBatches ? snakeToCamel(dbBatches) : [];
+    // Auto-seed trades if table in Supabase is empty
+    if (!dbTrades || dbTrades.length === 0) {
+      console.log("Trades table in Supabase is empty. Seeding default trades...");
+      const sanitizedDefaultTrades = camelToSnake(DEFAULT_TRADES).map((t: any) => {
+        delete t.seat_capacity;
+        return t;
+      });
+      await supabase.from("trades").upsert(sanitizedDefaultTrades, { onConflict: "id" });
+      const { data: reFetchedTrades } = await supabase.from("trades").select("*");
+      MEMORY_DB[KEYS.TRADES] = reFetchedTrades ? snakeToCamel(reFetchedTrades) : DEFAULT_TRADES;
+    } else {
+      MEMORY_DB[KEYS.TRADES] = snakeToCamel(dbTrades);
+    }
+
+    // Auto-seed batches if table in Supabase is empty
+    if (!dbBatches || dbBatches.length === 0) {
+      console.log("Batches table in Supabase is empty. Seeding default batches...");
+      const sanitizedDefaultBatches = camelToSnake(DEFAULT_BATCHES).map((b: any) => {
+        delete b.capacity;
+        return b;
+      });
+      await supabase.from("batches").upsert(sanitizedDefaultBatches, { onConflict: "id" });
+      const { data: reFetchedBatches } = await supabase.from("batches").select("*");
+      MEMORY_DB[KEYS.BATCHES] = reFetchedBatches ? snakeToCamel(reFetchedBatches) : DEFAULT_BATCHES;
+    } else {
+      MEMORY_DB[KEYS.BATCHES] = snakeToCamel(dbBatches);
+    }
     MEMORY_DB[KEYS.STUDENTS] = dbStudents ? snakeToCamel(dbStudents) : [];
     MEMORY_DB[KEYS.HISTORY] = dbHistory ? snakeToCamel(dbHistory) : [];
     MEMORY_DB[KEYS.LOGS] = dbLogs ? dbLogs.map((l: any) => ({
