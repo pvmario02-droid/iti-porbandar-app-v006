@@ -682,17 +682,55 @@ export function getTrades(): Trade[] {
   return getStoredData<Trade>(KEYS.TRADES);
 }
 
+export async function reloadTradesFromSupabase(): Promise<Trade[]> {
+  if (!isSupabaseConfigured) return getTrades();
+  try {
+    const { data, error } = await supabase.from("trades").select("*");
+    if (error) {
+      console.error("Error reloading trades from Supabase:", error);
+      return getTrades();
+    }
+    if (data) {
+      const camelTrades = snakeToCamel(data);
+      setStoredData(KEYS.TRADES, camelTrades);
+      return camelTrades;
+    }
+  } catch (err) {
+    console.error("Exception reloading trades from Supabase:", err);
+  }
+  return getTrades();
+}
+
 export function saveTrade(trade: Trade) {
   const trades = getTrades();
   const idx = trades.findIndex(t => t.id === trade.id);
-  if (idx > -1) {
+  const isUpdate = idx > -1;
+
+  if (isUpdate) {
     trades[idx] = trade;
   } else {
     trades.push(trade);
   }
   setStoredData(KEYS.TRADES, trades);
 
-  safeSupabaseOp("Save Trade", () => supabase.from("trades").upsert(camelToSnake(trade)));
+  if (isUpdate) {
+    safeSupabaseOp("Update Trade", async () => {
+      const payload = camelToSnake(trade);
+      const { data, error } = await supabase
+        .from("trades")
+        .update(payload)
+        .eq("id", trade.id);
+
+      if (error) {
+        console.error("Error updating trade in Supabase:", error);
+      } else {
+        await reloadTradesFromSupabase();
+      }
+      return { data, error };
+    });
+  } else {
+    safeSupabaseOp("Save Trade", () => supabase.from("trades").upsert(camelToSnake(trade)));
+  }
 }
 
 // 2b. BATCH ASSIGNMENT HISTORY APIs
@@ -728,17 +766,55 @@ export function getBatches(): Batch[] {
   return batches;
 }
 
+export async function reloadBatchesFromSupabase(): Promise<Batch[]> {
+  if (!isSupabaseConfigured) return getBatches();
+  try {
+    const { data, error } = await supabase.from("batches").select("*");
+    if (error) {
+      console.error("Error reloading batches from Supabase:", error);
+      return getBatches();
+    }
+    if (data) {
+      const camelBatches = snakeToCamel(data);
+      setStoredData(KEYS.BATCHES, camelBatches);
+      return camelBatches;
+    }
+  } catch (err) {
+    console.error("Exception reloading batches from Supabase:", err);
+  }
+  return getBatches();
+}
+
 export function saveBatch(batch: Batch) {
   const batches = getBatches();
   const idx = batches.findIndex(b => b.id === batch.id);
-  if (idx > -1) {
+  const isUpdate = idx > -1;
+
+  if (isUpdate) {
     batches[idx] = batch;
   } else {
     batches.push(batch);
   }
   setStoredData(KEYS.BATCHES, batches);
 
-  safeSupabaseOp("Save Batch", () => supabase.from("batches").upsert(camelToSnake(batch)));
+  if (isUpdate) {
+    safeSupabaseOp("Update Batch", async () => {
+      const payload = camelToSnake(batch);
+      const { data, error } = await supabase
+        .from("batches")
+        .update(payload)
+        .eq("id", batch.id);
+
+      if (error) {
+        console.error("Error updating batch in Supabase:", error);
+      } else {
+        await reloadBatchesFromSupabase();
+      }
+      return { data, error };
+    });
+  } else {
+    safeSupabaseOp("Save Batch", () => supabase.from("batches").upsert(camelToSnake(batch)));
+  }
 }
 
 // 4. STUDENT APIs
