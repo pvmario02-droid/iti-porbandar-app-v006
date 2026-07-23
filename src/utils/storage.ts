@@ -716,20 +716,30 @@ export function saveTrade(trade: Trade) {
   if (isUpdate) {
     safeSupabaseOp("Update Trade", async () => {
       const payload = camelToSnake(trade);
+      delete payload.seat_capacity;
+
       const { data, error } = await supabase
         .from("trades")
         .update(payload)
-        .eq("id", trade.id);
+        .eq("id", trade.id)
+        .select();
 
       if (error) {
         console.error("Error updating trade in Supabase:", error);
       } else {
+        if (data && data.length === 0) {
+          console.warn(`Trade UPDATE affected 0 rows for primary key id: '${trade.id}'. Check if record exists in Supabase DB.`);
+        }
         await reloadTradesFromSupabase();
       }
       return { data, error };
     });
   } else {
-    safeSupabaseOp("Save Trade", () => supabase.from("trades").upsert(camelToSnake(trade)));
+    safeSupabaseOp("Save Trade", () => {
+      const payload = camelToSnake(trade);
+      delete payload.seat_capacity;
+      return supabase.from("trades").upsert(payload);
+    });
   }
 }
 
@@ -800,20 +810,30 @@ export function saveBatch(batch: Batch) {
   if (isUpdate) {
     safeSupabaseOp("Update Batch", async () => {
       const payload = camelToSnake(batch);
+      delete payload.capacity;
+
       const { data, error } = await supabase
         .from("batches")
         .update(payload)
-        .eq("id", batch.id);
+        .eq("id", batch.id)
+        .select();
 
       if (error) {
         console.error("Error updating batch in Supabase:", error);
       } else {
+        if (data && data.length === 0) {
+          console.warn(`Batch UPDATE affected 0 rows for primary key id: '${batch.id}'. Check if record exists in Supabase DB.`);
+        }
         await reloadBatchesFromSupabase();
       }
       return { data, error };
     });
   } else {
-    safeSupabaseOp("Save Batch", () => supabase.from("batches").upsert(camelToSnake(batch)));
+    safeSupabaseOp("Save Batch", () => {
+      const payload = camelToSnake(batch);
+      delete payload.capacity;
+      return supabase.from("batches").upsert(payload);
+    });
   }
 }
 
