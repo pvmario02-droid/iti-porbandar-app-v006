@@ -265,28 +265,17 @@ export function getGujaratiTradeName(englishName: string): string {
 }
 
 /**
- * Gets the student's actual remark from the attendance irregularity record
+ * Gets the student's actual remark from the attendance irregularity record.
+ * Default Remarks field must always be blank for every student unless manually typed and saved.
  */
 export function getStudentIrregularityRemark(cand: any): string {
-  if (cand.remark && typeof cand.remark === "string" && cand.remark.trim() !== "") {
+  if (cand?.remark && typeof cand.remark === "string" && cand.remark.trim() !== "") {
     return cand.remark.trim();
   }
-  if (cand.remarks && typeof cand.remarks === "string" && cand.remarks.trim() !== "") {
+  if (cand?.remarks && typeof cand.remarks === "string" && cand.remarks.trim() !== "") {
     return cand.remarks.trim();
   }
-  
-  const workingDays = cand.workingDays ?? 0;
-  const presentDays = cand.presentDays ?? 0;
-  const absentDays = workingDays - presentDays;
-  
-  if (absentDays >= 15) {
-    return "નામકમી નોટિસ";
-  } else if (absentDays >= 10) {
-    return "ચેતવણી";
-  } else if (absentDays > 0) {
-    return "અનિયમિત";
-  }
-  return "-";
+  return "";
 }
 
 export interface SharedLetterLayoutOptions {

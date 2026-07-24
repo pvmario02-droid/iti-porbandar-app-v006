@@ -175,8 +175,21 @@ export default function SupervisorDashboard({ onLogout, currentUser }: Superviso
 
   const handleRemarkChange = (cand: any, newRemark: string) => {
     setRemarksState(prev => ({ ...prev, [cand.id]: newRemark }));
-    const updatedRecord = { ...cand, remark: newRemark };
-    saveAttendanceBatch([updatedRecord]);
+  };
+
+  const handleSaveRemarks = (candidates: any[]) => {
+    const recordsToUpdate: any[] = [];
+    candidates.forEach(cand => {
+      if (remarksState[cand.id] !== undefined) {
+        recordsToUpdate.push({ ...cand, remark: remarksState[cand.id] });
+      }
+    });
+    if (recordsToUpdate.length > 0) {
+      saveAttendanceBatch(recordsToUpdate);
+      alert("તાલીમાર્થી રિમાર્ક્સ સુપાબેઝ સક્ષમ ડેટાબેઝમાં સફળતાપૂર્વક સેવ થયા.");
+    } else {
+      alert("કોઈ નવો રિમાર્ક્સ ફેરફાર સેવ કરવા માટે મળ્યો નથી.");
+    }
   };
 
   useEffect(() => {
@@ -1589,9 +1602,19 @@ export default function SupervisorDashboard({ onLogout, currentUser }: Superviso
 
                         {/* Interactive Remarks Editor */}
                         <div className="border-t border-slate-100 pt-4 space-y-3">
-                          <h4 className="text-[11px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
-                            📝 Edit Student Remarks (તાલીમાર્થી રિમાર્ક્સ સુધારો)
-                          </h4>
+                          <div className="flex justify-between items-center">
+                            <h4 className="text-[11px] font-extrabold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                              📝 Edit Student Remarks (તાલીમાર્થી રિમાર્ક્સ સુધારો)
+                            </h4>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveRemarks(irregularCandidates)}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <span className="material-symbols-rounded text-sm">save</span>
+                              રિમાર્ક્સ સેવ કરો (Save Remarks)
+                            </button>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {irregularCandidates.map((cand) => {
                               const studentObj = myStudents.find(s => s.id === cand.studentId);
@@ -1600,7 +1623,7 @@ export default function SupervisorDashboard({ onLogout, currentUser }: Superviso
                                 : cand.studentName;
                               const currentRemark = remarksState[cand.id] !== undefined
                                 ? remarksState[cand.id]
-                                : (cand.remark || getStudentIrregularityRemark(cand));
+                                : (cand.remark || "");
 
                               return (
                                 <div key={cand.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
@@ -1614,7 +1637,7 @@ export default function SupervisorDashboard({ onLogout, currentUser }: Superviso
                                     rows={1}
                                     value={currentRemark}
                                     onChange={(e) => handleRemarkChange(cand, e.target.value)}
-                                    placeholder="રિમાર્ક્સ લખો (દા.ત. મોબાઇલ નોટિસ, ગેરહાજર...)"
+                                    placeholder="રિમાર્ક્સ મેન્યુઅલી લખો..."
                                     className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                   />
                                 </div>

@@ -722,14 +722,24 @@ export function saveTrade(trade: Trade) {
 
   safeSupabaseOp("Save Trade", async () => {
     const payload = camelToSnake(trade);
-    delete payload.seat_capacity;
 
     console.log(`[Supabase Trade Sync] Upserting on table 'trades', Record ID: '${trade.id}', Payload:`, payload);
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("trades")
       .upsert(payload, { onConflict: "id" })
       .select();
+
+    if (error && (error.code === "PGRST204" || error.message?.includes("seat_capacity"))) {
+      console.warn("[Supabase Trade Sync Warning] 'seat_capacity' column missing from Supabase trades table schema cache. Retrying without 'seat_capacity':", error.message);
+      delete payload.seat_capacity;
+      const retry = await supabase
+        .from("trades")
+        .upsert(payload, { onConflict: "id" })
+        .select();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error("[Supabase Trade Sync Error] Error updating/saving trade in Supabase:", error);
@@ -840,6 +850,26 @@ export function getStudents(): Student[] {
   return getStoredData<Student>(KEYS.STUDENTS);
 }
 
+export async function reloadStudentsFromSupabase(): Promise<Student[]> {
+  if (!isSupabaseConfigured) return getStudents();
+  try {
+    const { data, error } = await supabase.from("students").select("*");
+    if (error) {
+      console.error("Error reloading students from Supabase:", error);
+      return getStudents();
+    }
+    if (data) {
+      const camelStudents = snakeToCamel(data);
+      setStoredData(KEYS.STUDENTS, camelStudents);
+      syncStudentsToIndexedDB(camelStudents);
+      return camelStudents;
+    }
+  } catch (err) {
+    console.error("Exception reloading students from Supabase:", err);
+  }
+  return getStudents();
+}
+
 export function saveStudent(student: Student) {
   const students = getStudents();
   const idx = students.findIndex(s => s.id === student.id);
@@ -855,7 +885,29 @@ export function saveStudent(student: Student) {
   setStoredData(KEYS.STUDENTS, students);
   syncStudentsToIndexedDB(students);
 
-  safeSupabaseOp("Save Student", () => supabase.from("students").upsert(camelToSnake(updated)));
+  safeSupabaseOp("Save Student", async () => {
+    const payload = camelToSnake(updated);
+    console.log(`[Supabase Student Sync] Upserting on table 'students', Record ID: '${updated.id}', Payload:`, payload);
+
+    const { data, error } = await supabase
+      .from("students")
+      .upsert(payload, { onConflict: "id" })
+      .select();
+
+    if (error) {
+      console.error("[Supabase Student Sync Error] Error updating/saving student in Supabase:", error);
+    } else {
+      const affectedCount = data ? data.length : 0;
+      console.log(`[Supabase Student Sync Success] Upserted student '${updated.id}'. Affected rows count: ${affectedCount}`, data);
+      if (affectedCount === 1) {
+        console.log(`[Supabase Student Sync Verified] Exactly 1 row affected for student ID '${updated.id}'.`);
+      } else {
+        console.warn(`[Supabase Student Sync Notice] Expected 1 affected row, got ${affectedCount}.`);
+      }
+      await reloadStudentsFromSupabase();
+    }
+    return { data, error };
+  });
 }
 
 export function deleteStudent(id: string) {
@@ -864,7 +916,29 @@ export function deleteStudent(id: string) {
   setStoredData(KEYS.STUDENTS, updated);
   syncStudentsToIndexedDB(updated);
 
-  safeSupabaseOp("Delete Student", () => supabase.from("students").delete().eq("id", id));
+  safeSupabaseOp("Delete Student", async () => {
+    console.log(`[Supabase Student Delete] Deleting student ID: '${id}' from table 'students'`);
+
+    const { data, error } = await supabase
+      .from("students")
+      .delete()
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      console.error("[Supabase Student Delete Error] Error deleting student from Supabase:", error);
+    } else {
+      const affectedCount = data ? data.length : 0;
+      console.log(`[Supabase Student Delete Success] Deleted student '${id}'. Affected rows count: ${affectedCount}`, data);
+      if (affectedCount === 1) {
+        console.log(`[Supabase Student Delete Verified] Exactly 1 row deleted for student ID '${id}'.`);
+      } else {
+        console.warn(`[Supabase Student Delete Notice] Expected 1 deleted row, got ${affectedCount}.`);
+      }
+      await reloadStudentsFromSupabase();
+    }
+    return { data, error };
+  });
 }
 
 export function saveStudentsBatch(newStudents: Student[]) {
@@ -873,7 +947,7 @@ export function saveStudentsBatch(newStudents: Student[]) {
   const updatedRecords: Student[] = [];
 
   newStudents.forEach(newStu => {
-    const idx = students.findIndex(s => s.enrollmentNumber === newStu.enrollmentNumber);
+    const idx = students.findIndex(s => s.id === newStu.id || (newStu.enrollmentNumber && s.enrollmentNumber === newStu.enrollmentNumber));
     let updated: Student;
     if (idx > -1) {
       updated = { ...students[idx], ...newStu, updatedAt: now };
@@ -889,7 +963,24 @@ export function saveStudentsBatch(newStudents: Student[]) {
   syncStudentsToIndexedDB(students);
 
   if (updatedRecords.length > 0) {
-    safeSupabaseOp("Save Students Batch", () => supabase.from("students").upsert(camelToSnake(updatedRecords)));
+    safeSupabaseOp("Save Students Batch", async () => {
+      const payloadList = camelToSnake(updatedRecords);
+      console.log(`[Supabase Student Batch Sync] Upserting ${payloadList.length} students on table 'students'`);
+
+      const { data, error } = await supabase
+        .from("students")
+        .upsert(payloadList, { onConflict: "id" })
+        .select();
+
+      if (error) {
+        console.error("[Supabase Student Batch Sync Error] Error in batch upsert:", error);
+      } else {
+        const affectedCount = data ? data.length : 0;
+        console.log(`[Supabase Student Batch Sync Success] Upserted student batch. Affected rows count: ${affectedCount}`, data);
+        await reloadStudentsFromSupabase();
+      }
+      return { data, error };
+    });
   }
 }
 

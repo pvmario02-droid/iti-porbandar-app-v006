@@ -340,5 +340,23 @@ export interface MonthlyReportSnapshot {
   ipAddress?: string;
 }
 
+export interface GeneratedReport {
+  id: string;
+  reportType: "FORWARDING_LETTER" | "ATTENDANCE_DEFAULTER" | "GENERAL_LETTER" | "ON_ROLL_REPORT" | "OTHER";
+  reportName: string;
+  generatedAt: string;
+  trade?: string;
+  batch?: string;
+  month?: string | number;
+  academicSession?: string;
+  generatedBy: string;
+  generatedByRole?: string;
+  dataSnapshot?: any;
+  fileType?: "pdf" | "word" | "both" | "html";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+
 
 
